@@ -5,9 +5,14 @@ from typing import Tuple
 
 class User(Type):
     """
-    TODO: TBD IN DOCS
+    User of a messenger (may be a bot)
     """
-    pass
+
+
+class Chat(Type):
+    """
+    Chat / group / channel
+    """
 
 
 class Attachment(Type):
@@ -18,9 +23,9 @@ class Attachment(Type):
 
 class Message(Type):
     """
-    Core message type - basically, just a list of attachments + some metadata.
+    Core message type - basically, just a list of attachments + some metadata
     """
-    sent_by: User  # TODO: TBD IN DOCS
-    sent_at: datetime  # TODO: TBD IN DOCS
-    origin: str  # TODO: TBD IN DOCS
+    time: datetime
+    sender: User
+    chat: Chat
     content: Tuple[Attachment, ...]

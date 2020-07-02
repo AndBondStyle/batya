@@ -1,10 +1,22 @@
-from .text import Text, TextNode, TextGroup, TextContent
 from core import Attachment
+from .text import *
 
 __all__ = [
+    'Attachment',
+    # Text-related stuff
     'Text',
     'TextNode',
     'TextGroup',
     'TextContent',
-    'Attachment',
+    'Mention',
+    'CodeBlock',
+    'ListType',
+    'TextList',
+    'TextLink',
+    'Color',
+    'Bold',
+    'Italic',
+    'Strike',
+    'Underline',
+    'InlineCode',
 ]
