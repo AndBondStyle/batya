@@ -2,6 +2,7 @@ from typing import Tuple, Callable, Any, Optional
 from pydantic import BaseModel, Field, Extra
 from datetime import datetime
 from uuid import uuid4
+from enum import Enum
 import asyncio
 
 
@@ -37,8 +38,8 @@ class Provider(Type):  # TODO: DRAFT
         self._subscribers.remove(callback)
 
     def notify(self, data: Any):
-        tasks = [coro(data) for coro in self._subscribers]
-        for task in tasks: asyncio.ensure_future(task)
+        for coro in self._subscribers:
+            asyncio.ensure_future(coro(data))
 
 
 class User(Type):
@@ -46,15 +47,29 @@ class User(Type):
     User of a messenger (may be a bot)
     """
     is_bot: bool
-    username: Optional[str]
     full_name: str
     short_name: str
+    language: Optional[str]
+
+
+class ChatType(str, Enum):
+    USER = 'USER'
+    GROUP = 'GROUP'
 
 
 class Chat(Type):
     """
     Chat / group / channel
     """
+    type: ChatType
+
+    @property
+    def is_user(self) -> bool:
+        return self.type == ChatType.USER
+
+    @property
+    def is_group(self) -> bool:
+        return self.type == ChatType.GROUP
 
 
 class Attachment(Type):
