@@ -30,11 +30,11 @@ class Document(Attachment):
     size: int = -1
     do_not_process: bool = False
 
-    async def download(self, offset: int = 0, size: int = -1) -> bytes:
+    async def download(self, offset: int = 0, limit: int = -1) -> bytes:
         """
         Download file contents
         :param offset: offset from the start
-        :param size: size of chunk to download, -1 for unlimited size
+        :param limit: size of chunk to download, -1 for unlimited size
         :return: bytes of requested chunk
         """
         raise NotImplementedError
