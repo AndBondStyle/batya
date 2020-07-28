@@ -1,4 +1,5 @@
 from aiohttp import ClientSession
+from bs4 import BeautifulSoup
 from core.attachments import *
 from core import *
 import asyncio
@@ -31,9 +32,10 @@ class Telegram(Provider):
                 data = await self.request('getUpdates', {'offset': offset})
                 offset = max((x['update_id'] for x in data), default=0) + 1
                 for update in data:
-                    if 'message' in update:
-                        message = TgMessage.from_json(update['message'])
-                        self.notify(message)
+                    self.notify(update)
+                    # if 'message' in update:
+                    #     message = TgMessage.from_json(update['message'])
+                    #     self.notify(message)
 
 
 class TgUser(User):
@@ -80,8 +82,64 @@ class TgText(Text):
     @staticmethod
     def from_entities(text: str, entities: list):
         for x in entities:
-            x['end'] = x['offset'] + x['length']
+            x['children'] = []
+            x['range'] = range(x['offset'], x['offset'] + x['length'])
+        tree_entities = []
+        for x in entities:
+            TgText.treeify(tree_entities, x)
+        return tree_entities
 
     @staticmethod
-    def wrap(root, start, end, tag):
-        pass
+    def is_inside(outer: range, inner: range):
+        return outer.start <= inner.start and outer.stop >= inner.stop
+
+    @staticmethod
+    def treeify(entities: list, candidate: dict):
+        for i, x in enumerate(entities):
+            if TgText.is_inside(x['range'], candidate['range']):
+                TgText.treeify(x['children'], candidate)
+                break
+        else:
+            entities.append(candidate)
+            entities.sort(key=lambda e: e['offset'])
+
+    @staticmethod
+    def tag_for_entity(soup: BeautifulSoup, entity: dict):
+        type = entity['type']
+        if type == 'mention':
+            tag = soup.new_tag('m')
+            tag.attrs['user'] = '...'
+            return tag
+        elif type == 'url':
+            tag = soup.new_tag('a')
+        elif type == 'bold':
+            return soup.new_tag('b')
+        elif type == 'italic':
+            return soup.new_tag('i')
+        elif type == 'underline':
+            return soup.new_tag('u')
+        elif type == 'strikethrough':
+            return soup.new_tag('s')
+        elif type == 'code':
+            return soup.new_tag('code')
+        elif type == 'pre':
+            return soup.new_tag('pre')
+        elif type == 'text_link':
+            pass
+        elif type == 'hashtag':
+            pass
+        elif type == 'cashtag':
+            pass
+        elif type == 'bot_command':
+            pass
+        elif type == 'email':
+            pass
+        elif type == 'phone_number':
+            pass
+        elif type == 'text_mention':
+            pass
+
+    @staticmethod
+    def build(text: str, soup: BeautifulSoup, root: dict):
+        offset = root['offset']
+        tag = soup.new_tag()
