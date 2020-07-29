@@ -3,7 +3,8 @@ import asyncio
 
 
 async def callback(data):
-    print(data)
+    tree = data.content[0].tree
+    print(tree)
 
 
 tg = Telegram(token='')

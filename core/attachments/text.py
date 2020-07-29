@@ -15,7 +15,7 @@ class Text(Attachment):
 
     @staticmethod
     def from_string(text: str) -> 'Text':
-        return Text.from_html(escape(text))
+        return Text.from_html(f'<body>{escape(text)}</body>')
 
     @staticmethod
     def from_markdown(md: str) -> 'Text':
@@ -23,16 +23,4 @@ class Text(Attachment):
 
     @staticmethod
     def from_html(html: str):
-        tree = BeautifulSoup(html, 'lxml')
-        body = tree.find('body')
-        if body: body.unwrap()
-        html = tree.find('html')
-        if html: html.unwrap()
-        p = tree.find('p', recursive=False)
-        if p: p.unwrap()
-        return Text(tree=tree)
-
-    def copy(self, **kwargs):
-        if not kwargs.get('update', {}).get('tree'):
-            kwargs.setdefault('update', {})['tree'] = self.tree.__copy__()
-        return super().copy(**kwargs)
+        return Text(tree=BeautifulSoup(html, 'lxml'))
