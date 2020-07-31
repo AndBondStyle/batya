@@ -1,5 +1,6 @@
+from pydantic import BaseModel, Extra, AnyHttpUrl as URL
 from typing import Tuple, Callable, Any, Optional
-from pydantic import BaseModel, Extra
+from async_property import async_property
 from datetime import datetime
 from enum import Enum
 import json
@@ -9,7 +10,7 @@ class Network(BaseModel):
     """
     Representation of a specific (social) network / messaging platform
     """
-    uid: str
+    id: str
 
     class Config:
         extra = Extra.allow
@@ -17,6 +18,9 @@ class Network(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         self._subscribers = set()
+
+    async def send(self, message: 'Message'):
+        raise NotImplementedError
 
     async def setup(self):
         pass
@@ -39,7 +43,7 @@ class ID(BaseModel):
     def encode(self) -> str:
         # TODO: TEMPORARY DRAFT
         return json.dumps({
-            'network': self.origin.uid,
+            'network': self.origin.id,
             'native': self.native,
         })
 
@@ -62,25 +66,44 @@ class Type(BaseModel):
 
     @classmethod
     def from_json(cls, pid: ID, data: dict) -> __qualname__:
-        # PyCharm hack: disable "must implement all abstract methods"
+        # FIXME: PyCharm hack: disable "must implement all abstract methods"
         # noinspection PyRedundantParentheses
         raise (NotImplementedError)
 
     @classmethod
     async def from_id(cls, id: ID) -> __qualname__:
-        # PyCharm hack: disable "must implement all abstract methods"
+        # FIXME: PyCharm hack: disable "must implement all abstract methods"
         # noinspection PyRedundantParentheses
         raise (NotImplementedError)
+
+
+class Locale:
+    # TODO: TBD IN DOCS
+    raw: str
 
 
 class User(Type):
     """
     User of a messenger (may be a bot)
     """
+    locale: Optional[Locale]
     is_bot: bool
-    full_name: str
-    short_name: str
-    language: Optional[str]
+
+    @async_property
+    async def short_name(self) -> str:
+        raise NotImplementedError
+
+    @async_property
+    async def full_name(self) -> str:
+        raise NotImplementedError
+
+    @async_property
+    async def avatar(self) -> Optional['Document']:
+        raise NotImplementedError
+
+    @async_property
+    async def profile(self) -> Optional[URL]:
+        raise NotImplementedError
 
 
 class ChatType(str, Enum):
@@ -88,6 +111,7 @@ class ChatType(str, Enum):
     GROUP = 'GROUP'
 
 
+# TODO: TBD IN SPEC
 class Chat(Type):
     """
     Chat / group / channel
@@ -105,7 +129,8 @@ class Message(Type):
     """
     Core message type - basically, just a list of attachments + some metadata
     """
+    sender: Optional[User]
     when: datetime
-    sender: User
+    last_edit: Optional[datetime]
     chat: Chat
     content: Tuple[Attachment, ...]
