@@ -1,8 +1,18 @@
-from .general import Type, Provider, User, ChatType, Chat, Message, Attachment
+from .general import (
+    Network,
+    ID,
+    Type,
+    User,
+    ChatType,
+    Chat,
+    Message,
+    Attachment,
+)
 
 __all__ = [
+    'Network',
+    'ID',
     'Type',
-    'Provider',
     'User',
     'ChatType',
     'Chat',

@@ -1,4 +1,4 @@
-from providers.tg import Telegram
+from networks.tg import Telegram
 import asyncio
 
 

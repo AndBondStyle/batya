@@ -5,13 +5,18 @@ from core import *
 import asyncio
 
 
-class Telegram(Provider):
+class Telegram(Network):
     id = 'telegram'
     token: str
 
     def __init__(self, **data):
         super().__init__(**data)
         self._http = ClientSession()
+        self._id = ID(native=None, origin=self)
+
+    def _notify(self, data):
+        for coro in self._subscribers:
+            asyncio.ensure_future(coro(data))
 
     async def request(self, method, data=None):
         url = f'https://api.telegram.org/bot{self.token}/{method}'
@@ -34,15 +39,15 @@ class Telegram(Provider):
                 for update in data:
                     # self.notify(update)
                     if 'message' in update:
-                        message = TgMessage.from_json(update['message'])
-                        self.notify(message)
+                        message = TgMessage.from_json(self._id, update['message'])
+                        self._notify(message)
 
 
 class TgUser(User):
-    @staticmethod
-    def from_json(data) -> 'TgUser':
+    @classmethod
+    def from_json(cls, pid, data):
         return TgUser(
-            id=data['id'],
+            id=pid.clone(data['id']),
             is_bot=data['is_bot'],
             short_name=data['first_name'],
             full_name=(data['first_name'] + ' ' + data.get('last_name', '')).strip(),
@@ -56,38 +61,38 @@ class TgUser(User):
 
 
 class TgChat(Chat):
-    @staticmethod
-    def from_json(data) -> 'TgChat':
+    @classmethod
+    def from_json(cls, pid, data):
         return TgChat(
-            id=data['id'],
+            id=pid.clone(data['id']),
             type=ChatType.USER if data['type'] == 'private' else ChatType.GROUP,
         )
 
 
 class TgMessage(Message):
-    @staticmethod
-    def from_json(data) -> 'TgMessage':
+    @classmethod
+    def from_json(cls, pid, data):
         return TgMessage(
-            id=data['message_id'],
+            id=pid.clone(data['message_id']),
             when=data['date'],
-            sender=TgUser.from_json(data['from']),
-            chat=TgChat.from_json(data['chat']),
-            content=TgMessage.parse_content(data),
+            sender=TgUser.from_json(pid, data['from']),
+            chat=TgChat.from_json(pid, data['chat']),
+            content=TgMessage.parse_content(pid, data),
         )
 
     @staticmethod
-    def parse_content(data):
+    def parse_content(pid: ID, data: dict):
         content = []
         if data.get('text'):
-            content.append(TgText.from_json(data))
+            content.append(TgText.from_json(pid, data))
         return tuple(content)
 
 
 class TgText(Text):
-    @staticmethod
-    def from_json(data) -> 'TgText':
+    @classmethod
+    def from_json(cls, pid, data):
         parser = TgTextParser(data['text'], data.get('entities', []))
-        return parser.parse()
+        return parser.parse(pid)
 
 
 class TgTextParser:
@@ -180,7 +185,7 @@ class TgTextParser:
         self.postprocess(tag, root)
         return tag
 
-    def parse(self) -> TgText:
+    def parse(self, pid: ID) -> TgText:
         tree_entities = []
         for x in self.entities:
             self.treeify(tree_entities, x)
@@ -192,4 +197,4 @@ class TgTextParser:
         }
         self.soup.root.replace_with(self.build(root))
         self.soup.root.unwrap()
-        return TgText(tree=self.soup)
+        return TgText(id=pid.clone(), tree=self.soup)

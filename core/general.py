@@ -1,35 +1,25 @@
 from typing import Tuple, Callable, Any, Optional
-from pydantic import BaseModel, Field, Extra
+from pydantic import BaseModel, Extra
 from datetime import datetime
-from uuid import uuid4
 from enum import Enum
-import asyncio
+import json
 
 
-class Type(BaseModel):
+class Network(BaseModel):
     """
-    Base for all core types - immutable pydantic dataclass (model)
+    Representation of a specific (social) network / messaging platform
     """
-    id: str = Field(default_factory=lambda: str(uuid4()))  # TODO: DRAFT
+    uid: str
 
     class Config:
-        allow_mutation = False
-        extra = Extra.ignore
+        extra = Extra.allow
 
-    def __setattr__(self, key, value):
-        if key.startswith('_'):
-            object.__setattr__(self, key, value)
-        else:
-            super().__setattr__(key, value)
-
-
-class Provider(Type):  # TODO: DRAFT
     def __init__(self, **data):
         super().__init__(**data)
         self._subscribers = set()
 
     async def setup(self):
-        raise NotImplementedError
+        pass
 
     def subscribe(self, callback: Callable):
         self._subscribers.add(callback)
@@ -37,9 +27,50 @@ class Provider(Type):  # TODO: DRAFT
     def unsubscribe(self, callback: Callable):
         self._subscribers.remove(callback)
 
-    def notify(self, data: Any):
-        for coro in self._subscribers:
-            asyncio.ensure_future(coro(data))
+
+class ID(BaseModel):
+    native: Optional[str]
+    origin: Network
+
+    def clone(self, new_id: Optional[Any] = None):
+        new_id = str(new_id) if new_id else None
+        return ID(native=new_id, origin=self.origin)
+
+    def encode(self) -> str:
+        # TODO: TEMPORARY DRAFT
+        return json.dumps({
+            'network': self.origin.uid,
+            'native': self.native,
+        })
+
+    @classmethod
+    def decode(cls, batya, string) -> 'ID':
+        # TODO: TEMPORARY DRAFT
+        data = json.loads(string)
+        network = batya.get_network(data['network'])
+        return ID(native=data['native'], origin=network)
+
+
+class Type(BaseModel):
+    """
+    Base for all core types - pydantic-powered dataclass
+    """
+    id: ID
+
+    class Config:
+        extra = Extra.allow
+
+    @classmethod
+    def from_json(cls, pid: ID, data: dict) -> __qualname__:
+        # PyCharm hack: disable "must implement all abstract methods"
+        # noinspection PyRedundantParentheses
+        raise (NotImplementedError)
+
+    @classmethod
+    async def from_id(cls, id: ID) -> __qualname__:
+        # PyCharm hack: disable "must implement all abstract methods"
+        # noinspection PyRedundantParentheses
+        raise (NotImplementedError)
 
 
 class User(Type):
@@ -62,14 +93,6 @@ class Chat(Type):
     Chat / group / channel
     """
     type: ChatType
-
-    @property
-    def is_user(self) -> bool:
-        return self.type == ChatType.USER
-
-    @property
-    def is_group(self) -> bool:
-        return self.type == ChatType.GROUP
 
 
 class Attachment(Type):
