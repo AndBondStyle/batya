@@ -8,7 +8,7 @@ class Forward(Attachment):
     """
     Group of forwarded messages
     """
-    messages: Tuple[Message, ...]
+    messages: Tuple[Message, ...] = ()
 
 
 class DocumentType(str, Enum):

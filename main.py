@@ -2,9 +2,8 @@ from networks.tg import Telegram
 import asyncio
 
 
-async def callback(data):
-    tree = data.content[0].tree
-    print(tree)
+async def callback(message):
+    print('>>>', message.content)
 
 
 tg = Telegram(token='')

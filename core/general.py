@@ -13,6 +13,7 @@ class Network(BaseModel):
     id: str
 
     class Config:
+        # TODO: PATCH PYDANTIC
         extra = Extra.allow
 
     def __init__(self, **data):
@@ -33,18 +34,19 @@ class Network(BaseModel):
 
 
 class ID(BaseModel):
-    native: Optional[str]
+    native_id: Optional[str]
+    native_obj: Optional[Any]
     origin: Network
 
-    def clone(self, new_id: Optional[Any] = None):
+    def clone(self, new_id: Optional[Any] = None, src_obj: Optional[Any] = None):
         new_id = str(new_id) if new_id else None
-        return ID(native=new_id, origin=self.origin)
+        return ID(native_id=new_id, native_obj=src_obj, origin=self.origin)
 
     def encode(self) -> str:
         # TODO: TEMPORARY DRAFT
         return json.dumps({
             'network': self.origin.id,
-            'native': self.native,
+            'native': self.native_id,
         })
 
     @classmethod
@@ -52,7 +54,11 @@ class ID(BaseModel):
         # TODO: TEMPORARY DRAFT
         data = json.loads(string)
         network = batya.get_network(data['network'])
-        return ID(native=data['native'], origin=network)
+        return ID(native_id=data['native'], origin=network)
+
+    def __eq__(self, other):
+        if not isinstance(other, ID): return self.native_id == str(other)
+        return self.origin.id == other.origin.id and self.native_id == other.native_id
 
 
 class Type(BaseModel):
@@ -62,7 +68,9 @@ class Type(BaseModel):
     id: ID
 
     class Config:
+        # TODO: PATCH PYDANTIC
         extra = Extra.allow
+        arbitrary_types_allowed = True
 
     @classmethod
     def from_json(cls, pid: ID, data: dict) -> __qualname__:
@@ -77,7 +85,7 @@ class Type(BaseModel):
         raise (NotImplementedError)
 
 
-class Locale:
+class Locale(BaseModel):
     # TODO: TBD IN DOCS
     raw: str
 
