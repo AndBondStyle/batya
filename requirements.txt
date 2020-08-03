@@ -3,3 +3,4 @@ aiohttp
 lxml
 bs4
 markdown
+async-property
