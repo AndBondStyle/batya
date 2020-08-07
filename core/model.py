@@ -35,7 +35,7 @@ def is_valid_field(name: str, value: Any = MISSING) -> bool:
     ):
         # -> not valid identifier
         return False
-    if value is MISSING or isinstance(value, UNTOUCHED_TYPES):
+    if value is not MISSING and isinstance(value, UNTOUCHED_TYPES):
         # -> doesn't look like a field
         return False
     return True
@@ -63,7 +63,7 @@ class MetaModel(type):
         # Process class fields
         annotations = attrs.get('__annotations__', {})
         for name, type in annotations.items():
-            value = attrs.get(name)
+            value = attrs.get(name, MISSING)
             if is_valid_field(name, value):
                 fields[name] = Field(
                     type=type,
