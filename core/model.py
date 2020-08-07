@@ -95,12 +95,12 @@ class Model(metaclass=MetaModel):
         # Field set keeping track of what fields was requested by .fetch(...)
         do_setattr(self, '__fetched__', set())
         # Populate fields with either MISSING or value from kwargs
-        for key in do_getattr(self, '__fields__'):
-            value = kwargs.pop(key, MISSING)
+        for name, field in do_getattr(self, '__fields__').items():
+            value = kwargs.pop(name, field.default)
             if value is not MISSING:
                 # TODO: TYPE CHECK, COERCION, NESTED OBJECTS
                 ...
-            do_setattr(self, key, value)
+            do_setattr(self, name, value)
         if kwargs:
             # Crash if unknown fields were passed in kwargs
             raise AttributeError(f'Unexpected fields: {" ".join(kwargs.keys())}')
@@ -149,7 +149,7 @@ class Base(Model):
 
 class User(Base):
     locale: Optional[str]
-    is_bot: bool
+    is_bot: bool = False
     short_name: str
     full_name: str
     username: str
@@ -183,8 +183,9 @@ class UserImpl(User):
 
 async def main():
     user = UserImpl(username='test')
-    print('fields:', user.__fields__)
-    print('fetchers:', user.__fetchers__)
+    print('Fields:', user.__fields__)
+    print('Fetchers:', user.__fetchers__)
+    print('Is bot:', user.is_bot)
     await user.fetch('short_name')
     print('Short name is:', user.short_name)
     print('Full name is:', user.full_name)
