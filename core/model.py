@@ -11,7 +11,9 @@ MISSING = type('MISSING', (), {'__repr__': lambda x: 'MISSING'})()
 UNTOUCHED_TYPES = FunctionType, property, type, classmethod, staticmethod
 # Field descriptor type
 Field = namedtuple('Field', ['type', 'default', 'fetchers'])
-# Fetcher descriptor type
+# @fetches decorator metadata
+FetcherDeco = namedtuple('FetcherDeco', ['fetches', 'not_fetches', 'requires'])
+# Concise fetcher descriptor type
 Fetcher = namedtuple('Fetcher', ['name', 'fetches', 'requires'])
 
 
@@ -36,30 +38,19 @@ def is_valid_field(name: str, value: Any = MISSING) -> bool:
         # -> not valid identifier
         return False
     if value is not MISSING and isinstance(value, UNTOUCHED_TYPES):
-        # -> doesn't look like a field
+        # -> 'untouched' value type
         return False
     return True
 
 
 class MetaModel(type):
-    def __new__(mcs, name, bases, attrs):
+    @staticmethod
+    def extract_fields(bases, attrs) -> Dict[str, Field]:
         # Collect parent fields
-        fields: Dict[str, Field] = {}
-        for parent in bases[::-1]:  # TODO: ?
-            fields.update(parent.__fields__)
-        # Process @fetches-decorated methods
-        fetchers = defaultdict(list)
-        for name, field in fields.items():
-            fetchers[name].extend(field.fetchers)
-        for name, value in attrs.items():
-            if hasattr(value, '__fetches__'):
-                for field_name in value.__fetches__:
-                    fetcher = Fetcher(
-                        name=name,
-                        fetches=value.__fetches__,
-                        requires=value.__requires__,
-                    )
-                    fetchers[field_name].append(fetcher)
+        fields = {}
+        for parent in bases[::-1]:
+            if hasattr(parent, '__fields__'):
+                fields.update(parent.__fields__)
         # Process class fields
         annotations = attrs.get('__annotations__', {})
         for name, type in annotations.items():
@@ -68,8 +59,47 @@ class MetaModel(type):
                 fields[name] = Field(
                     type=type,
                     default=value,
-                    fetchers=tuple(fetchers.get(name, []))
+                    fetchers=(),
                 )
+        return fields
+
+    @staticmethod
+    def make_fetcher(name: str, deco: FetcherDeco, fields: Dict[str, Field]) -> Fetcher:
+        fetches = set(deco.fetches)
+        if '__all__' in fetches:
+            fetches = set(fields)
+        fetches -= set(deco.not_fetches)
+        fetches -= set(deco.requires)
+        diff = fetches - fields.keys()
+        if diff:
+            raise AttributeError(
+                f'Unknown fields specified in @fetches decorator: {diff}. '
+                f'Current model only has: {set(fields.keys())}'
+            )
+        return Fetcher(
+            name=name,
+            fetches=fetches,
+            requires=deco.requires,
+        )
+
+    @staticmethod
+    def extract_fetchers(attrs, fields: Dict[str, Field]) -> Dict[str, List[Fetcher]]:
+        # Process @fetches-decorated methods
+        fetchers = defaultdict(list)
+        for name, field in fields.items():
+            fetchers[name].extend(field.fetchers)
+        for name, func in attrs.items():
+            if hasattr(func, '__fetches__'):
+                annotations = func.__fetches__
+                for annotation in annotations:
+                    fetcher = MetaModel.make_fetcher(name, annotation, fields)
+                    for field_name in fetcher.fetches:
+                        fetchers[field_name].append(fetcher)
+        return fetchers
+
+    def __new__(mcs, name, bases, attrs):
+        fields = MetaModel.extract_fields(bases, attrs)
+        fetchers = MetaModel.extract_fetchers(attrs, fields)
         # Update fields if new fetchers are found
         for name, field in fields.items():
             if len(field.fetchers) != len(fetchers.get(name, [])):
@@ -129,12 +159,47 @@ class Model(metaclass=MetaModel):
 
 
 # Decorator to mark field-fetching methods and their dependencies
-def fetches(*fields, requires=()):
+def fetches(*fields, excluding=(), requires=()):
     def wrap(func):
+        nonlocal fields, excluding
         if not asyncio.iscoroutinefunction(func):
             raise ValueError('Use @fetches decorator on async methods only')
-        do_setattr(func, '__fetches__', tuple(fields))
-        do_setattr(func, '__requires__', tuple(requires))
+        # Get or create list of annotations (FetchersDeco objects)
+        annotations = list(getattr(func, '__fetches__', ()))
+        # May be needed later for ellipsis-based shortcuts
+        prev: Optional[FetcherDeco] = None if not annotations else annotations[-1]
+        # Check arguments for ellipsis notation
+        fields_with_ellipsis = ... in fields
+        excluding_with_ellipsis = ... is excluding or ... in excluding
+        if (fields_with_ellipsis or excluding_with_ellipsis) and prev is None:
+            raise ValueError(
+                'Can\'t resolve ellipsis notation. '
+                'Is there any @fetches decorator below?'
+            )
+        if fields_with_ellipsis:
+            fields = [x for x in fields if isinstance(x, str)]
+            fields.extend(prev.fetches)
+        if excluding_with_ellipsis:
+            if excluding is not ...:
+                excluding = [x for x in excluding if isinstance(x, str)]
+                excluding.extend(prev.not_fetches)
+            else:
+                excluding = list(prev.not_fetches)
+        # Accommodate for mixed-style requires
+        # Example: requires = ('a', 'b', 'c', ('x, 'y'))
+        #       common part -> ~~~~~~~~~~~~~   ~~~~~~~ <- variable part
+        common_requires = [x for x in requires if isinstance(x, str)]
+        variable_requires = [list(x) for x in requires if x not in common_requires]
+        if not variable_requires: variable_requires.append([])
+        # Generate & append new annotations
+        for vr in variable_requires:
+            new = FetcherDeco(
+                fetches=tuple(fields),
+                not_fetches=tuple(excluding),
+                requires=tuple(common_requires + vr),
+            )
+            annotations.append(new)
+        func.__fetches__ = tuple(annotations)
         return func
 
     return wrap
@@ -161,6 +226,11 @@ class UserImpl(User):
     _first_name: str
     _last_name: str
 
+    @fetches(..., excluding=..., requires=['username'])
+    @fetches('__all__', excluding=('avatar', 'profile'), requires=['id'])
+    async def test(self):
+        pass
+
     @fetches('id', requires=['username'])
     async def fetch_id_by_username(self):
         print('fetching id')
@@ -182,9 +252,13 @@ class UserImpl(User):
 
 
 async def main():
+    from pprint import pprint
     user = UserImpl(username='test')
-    print('Fields:', user.__fields__)
-    print('Fetchers:', user.__fetchers__)
+    print('Fields:')
+    pprint(user.__fields__)
+    print('Fetchers:')
+    pprint(user.__fetchers__)
+
     print('Is bot:', user.is_bot)
     await user.fetch('short_name')
     print('Short name is:', user.short_name)
